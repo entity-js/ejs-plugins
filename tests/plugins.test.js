@@ -4,31 +4,30 @@
  * \ \  __\ \ \ \-.  \\/_/\ \/\ \ \\/_/\ \/\ \____ \
  *  \ \_____\\ \_\\"\_\  \ \_\ \ \_\  \ \_\ \/\_____\
  *   \/_____/ \/_/ \/_/   \/_/  \/_/   \/_/  \/_____/
- *                          ______   __    __   ______
- *                         /\  ___\ /\ "-./  \ /\  ___\
- *                         \ \ \____\ \ \-./\ \\ \___  \
- *                          \ \_____\\ \_\ \ \_\\/\_____\
- *                           \/_____/ \/_/  \/_/ \/_____/
+ *                                         __   ______
+ *                                        /\ \ /\  ___\
+ *                                       _\_\ \\ \___  \
+ *                                      /\_____\\/\_____\
+ *                                      \/_____/ \/_____/
  */
 
 var path = require('path'),
     fs = require('fs'),
     os = require('os'),
     async = require('async'),
-    test = require('unit.js');
+    test = require('unit.js'),
+    Plugins = require('../lib'),
+    Plugin = require('../lib/plugin'),
+    EUndefinedPlugin = require('../lib/errors/EUndefinedPlugin');
+
+var tmpPath = path.join(
+      os.tmpdir(), 'entityjs-tests--indexer--' + process.pid
+    ),
+    fname = path.normalize(path.join(__dirname, '..', 'lib', 'plugin'));
 
 describe('ejs/plugins', function () {
 
   'use strict';
-
-  var Plugins = require('../lib'),
-      Plugin = require('../lib/plugin'),
-      EUndefinedPlugin = require('../lib/errors/EUndefinedPlugin');
-
-  var tmpPath = path.join(
-        os.tmpdir(), 'entityjs-tests--indexer--' + process.pid
-      ),
-      fname = path.normalize(path.join(__dirname, '..', 'lib', 'plugin'));
 
   function genPlugin(title, description, weight, version) {
     return '\n' +
@@ -135,14 +134,11 @@ describe('ejs/plugins', function () {
           idx++;
           if (idx === 1) {
             test.value(plugin).is('group1/example2');
-          }
-          else if (idx === 2) {
+          } else if (idx === 2) {
             test.value(plugin).is('group1/example1');
-          }
-          else if (idx === 3) {
+          } else if (idx === 3) {
             test.value(plugin).is('group2/example3/sub');
-          }
-          else if (idx === 4) {
+          } else if (idx === 4) {
             test.value(plugin).is('group2/example3');
           }
         }
@@ -428,12 +424,11 @@ describe('ejs/plugins', function () {
 
       var plugins = new Plugins(tmpPath),
           recieved = {},
-          queue = [];
-
-      function mockMessage(next, msg, param1, param2) {
-        recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
-        next();
-      }
+          queue = [],
+          mockMessage = function (next, msg, param1, param2) {
+            recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
+            next();
+          };
 
       queue.push(function (next) {
         plugins.index(next);
@@ -477,12 +472,11 @@ describe('ejs/plugins', function () {
 
       var plugins = new Plugins(tmpPath),
           recieved = {},
-          queue = [];
-
-      function mockMessage(next, msg, param1, param2) {
-        recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
-        next();
-      }
+          queue = [],
+          mockMessage = function (next, msg, param1, param2) {
+            recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
+            next();
+          };
 
       queue.push(function (next) {
         plugins.index(next);
@@ -530,12 +524,11 @@ describe('ejs/plugins', function () {
 
       var plugins = new Plugins(tmpPath),
           recieved = {},
-          queue = [];
-
-      function mockMessage(next, msg, param1, param2) {
-        recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
-        next();
-      }
+          queue = [],
+          mockMessage = function (next, msg, param1, param2) {
+            recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
+            next();
+          };
 
       queue.push(function (next) {
         plugins.index(next);
