@@ -20,7 +20,7 @@
     "async": "^1.2.1",
     "ejs-merge": "git://github.com/entity-js/ejs-merge.git#0.0.2",
     "ejs-sortby": "git://github.com/entity-js/ejs-sortby.git#0.0.2",
-    "ejs-t": "git://github.com/entity-js/ejs-t.git#0.0.2",
+    "ejs-t": "git://github.com/entity-js/ejs-t.git#0.0.3",
     "glob": "^5.0.12"
   }
 }
