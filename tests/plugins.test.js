@@ -16,11 +16,13 @@ var path = require('path'),
     os = require('os'),
     async = require('async'),
     test = require('unit.js'),
-    Plugins = require('../lib'),
     Plugin = require('../lib/plugin'),
-    EUndefinedPlugin = require('../lib/errors/EUndefinedPlugin');
+    EUndefinedPlugin = require('../lib/errors/EUndefinedPlugin'),
+    EUndefinedPluginType = require('../lib/errors/EUndefinedPluginType'),
+    EDisabledPlugin = require('../lib/errors/EDisabledPlugin');
 
-var tmpPath = path.join(
+var Plugins,
+    tmpPath = path.join(
       os.tmpdir(), 'entityjs-tests--indexer--' + process.pid
     ),
     fname = path.normalize(path.join(__dirname, '..', 'lib', 'plugin'));
@@ -29,92 +31,247 @@ describe('ejs/plugins', function () {
 
   'use strict';
 
-  function genPlugin(title, description, weight, version) {
-    return '\n' +
-      'var util = require(\'util\'),\n' +
-      '    Plugin = require(\'' + fname + '\');\n' +
-      '\n' +
-      'function TestPlugin(plugin) {\n' +
-      '  \'use strict\';\n' +
-      '\n' +
-      '  TestPlugin.super_.call(this, plugin, {\n' +
-      '    title: \'' + title + '\',\n' +
-      '    description: \'' + description + '\',\n' +
-      '    weight: ' + weight + ',\n' +
-      '    version: \'' + version + '\'\n' +
-      '  });\n' +
-      '}\n' +
-      '\n' +
-      'util.inherits(TestPlugin, Plugin);\n' +
-      '\n' +
-      'module.exports = TestPlugin;\n';
+  function genPlugin(done, p, info) {
+
+    var queue = [];
+
+    queue.push(function (next) {
+      fs.writeFile(
+        path.join(p, 'plugin.json'),
+        JSON.stringify(info),
+        next
+      );
+    });
+
+    queue.push(function (next) {
+      fs.writeFile(
+        path.join(p, 'index.js'),
+        '\n' +
+        'var util = require(\'util\'),\n' +
+        '    Plugin = require(\'' + fname + '\');\n' +
+        '\n' +
+        'function TestPlugin(plugin, info) {\n' +
+        '  \'use strict\';\n' +
+        '\n' +
+        '  TestPlugin.super_.call(this, plugin, info);\n' +
+        '}\n' +
+        '\n' +
+        'util.inherits(TestPlugin, Plugin);\n' +
+        '\n' +
+        'module.exports = TestPlugin;\n',
+        next
+      );
+    });
+
+    async.series(queue, done);
+
   }
 
-  beforeEach(function () {
-    fs.mkdirSync(tmpPath);
-    fs.mkdirSync(path.join(tmpPath, 'group1'));
-    fs.mkdirSync(path.join(tmpPath, 'group2'));
+  beforeEach(function (done) {
 
-    fs.mkdirSync(path.join(tmpPath, 'group1', 'example1'));
-    fs.writeFileSync(
-      path.join(tmpPath, 'group1', 'example1', 'index.js'),
-      genPlugin('Example 1', 'Example plugin #1.', 0, '1.0')
-    );
+    var queue = [];
 
-    fs.mkdirSync(path.join(tmpPath, 'group1', 'example2'));
-    fs.writeFileSync(
-      path.join(tmpPath, 'group1', 'example2', 'index.js'),
-      genPlugin('Example 2', 'Example plugin #2.', -5, '1.1')
-    );
+    Plugins = require('../lib');
 
-    fs.mkdirSync(path.join(tmpPath, 'group2', 'example3'));
-    fs.writeFileSync(
-      path.join(tmpPath, 'group2', 'example3', 'index.js'),
-      genPlugin('Example 3', 'Example plugin #3.', 5, '1.0')
-    );
+    queue.push(function (next) {
+      fs.mkdir(tmpPath, next);
+    });
 
-    fs.mkdirSync(path.join(tmpPath, 'group2', 'example3', 'sub'));
-    fs.writeFileSync(
-      path.join(tmpPath, 'group2', 'example3', 'sub', 'index.js'),
-      genPlugin('Subexample 3', 'Sub example plugin #3.', 4, '1.0')
-    );
+    queue.push(function (next) {
+      fs.mkdir(path.join(tmpPath, 'group1'), next);
+    });
+
+    queue.push(function (next) {
+      fs.mkdir(path.join(tmpPath, 'group2'), next);
+    });
+
+    queue.push(function (next) {
+      fs.mkdir(path.join(tmpPath, 'group1', 'example1'), next);
+    });
+
+    queue.push(function (next) {
+      genPlugin(next, path.join(tmpPath, 'group1', 'example1'), {
+        title: 'Example 1',
+        description: 'Example plugin #1.',
+        weight: 0,
+        version: '1.1.0'
+      });
+    });
+
+    queue.push(function (next) {
+      fs.mkdir(path.join(tmpPath, 'group1', 'example2'), next);
+    });
+
+    queue.push(function (next) {
+      genPlugin(next, path.join(tmpPath, 'group1', 'example2'), {
+        title: 'Example 2',
+        description: 'Example plugin #2.',
+        weight: -5,
+        version: '1.1.0'
+      });
+    });
+
+    queue.push(function (next) {
+      fs.mkdir(path.join(tmpPath, 'group2', 'example3'), next);
+    });
+
+    queue.push(function (next) {
+      genPlugin(next, path.join(tmpPath, 'group2', 'example3'), {
+        title: 'Example 3',
+        description: 'Example plugin #3.',
+        weight: 5,
+        version: '1.0.0'
+      });
+    });
+
+    queue.push(function (next) {
+      fs.mkdir(path.join(tmpPath, 'group2', 'example3', 'sub'), next);
+    });
+
+    queue.push(function (next) {
+      genPlugin(next, path.join(tmpPath, 'group2', 'example3', 'sub'), {
+        title: 'Subexample 3',
+        description: 'Sub example plugin #3.',
+        weight: 4,
+        version: '1.0.0',
+        dependencies: {
+          'example3': '1.0.0'
+        }
+      });
+    });
+
+    async.series(queue, done);
+
   });
 
-  afterEach(function () {
-    fs.unlinkSync(path.join(tmpPath, 'group1', 'example1', 'index.js'));
-    fs.rmdirSync(path.join(tmpPath, 'group1', 'example1'));
+  afterEach(function (done) {
 
-    fs.unlinkSync(path.join(tmpPath, 'group1', 'example2', 'index.js'));
-    fs.rmdirSync(path.join(tmpPath, 'group1', 'example2'));
+    delete require.cache[require.resolve('../lib')];
 
-    fs.unlinkSync(path.join(
-      tmpPath, 'group2', 'example3', 'sub', 'index.js'
-    ));
-    fs.rmdirSync(path.join(tmpPath, 'group2', 'example3', 'sub'));
+    global._ejsStatic['ejs-plugins'] = {
+      _types: {},
+      _index: {}
+    };
 
-    fs.unlinkSync(path.join(tmpPath, 'group2', 'example3', 'index.js'));
-    fs.rmdirSync(path.join(tmpPath, 'group2', 'example3'));
+    var queue = [];
 
-    fs.rmdirSync(path.join(tmpPath, 'group1'));
-    fs.rmdirSync(path.join(tmpPath, 'group2'));
-    fs.rmdirSync(tmpPath);
+    function clearPlg(pth) {
+      queue.push(function (next) {
+        fs.unlink(path.join(pth, 'plugin.json'), next);
+      });
+
+      queue.push(function (next) {
+        fs.unlink(path.join(pth, 'index.js'), next);
+      });
+
+      queue.push(function (next) {
+        fs.rmdir(pth, next);
+      });
+    }
+
+    clearPlg(path.join(tmpPath, 'group1', 'example1'));
+    clearPlg(path.join(tmpPath, 'group1', 'example2'));
+    clearPlg(path.join(tmpPath, 'group2', 'example3', 'sub'));
+    clearPlg(path.join(tmpPath, 'group2', 'example3'));
+
+    queue.push(function (next) {
+      fs.rmdir(path.join(tmpPath, 'group1'), next);
+    });
+
+    queue.push(function (next) {
+      fs.rmdir(path.join(tmpPath, 'group2'), next);
+    });
+
+    queue.push(function (next) {
+      fs.rmdir(tmpPath, next);
+    });
+
+    async.series(queue, done);
+
+  });
+
+  describe('Plugins.register()', function () {
+
+    it('shouldRegisterPluginType', function () {
+
+      Plugins.register(
+        'extension',
+        'Extension',
+        'An extension plugin type.',
+        tmpPath
+      );
+
+      test.object(
+        global._ejsStatic['ejs-plugins']._types
+      ).is({
+        extension: {
+          title: 'Extension',
+          description: 'An extension plugin type.',
+          paths: [tmpPath]
+        }
+      });
+
+    });
+
+  });
+
+  describe('Plugins.registered()', function () {
+
+    it('shouldReturnFalseIfNotDefined', function () {
+
+      test.bool(
+        Plugins.registered('extension')
+      ).isNotTrue();
+
+    });
+
+    it('shouldReturnTrueIfRegistered', function () {
+
+      Plugins.register(
+        'extension',
+        'Extension',
+        'An extension plugin type.',
+        tmpPath
+      );
+
+      test.bool(
+        Plugins.registered('extension')
+      ).isTrue();
+
+    });
+
+  });
+
+  describe('Plugins.types()', function () {
+
+    it('shouldReturnTheStaticObject', function () {
+
+      Plugins.register(
+        'extension',
+        'Extension',
+        'An extension plugin type.',
+        tmpPath
+      );
+
+      test.object(
+        Plugins.types()
+      ).is(global._ejsStatic['ejs-plugins']._types);
+
+    });
+
   });
 
   describe('Plugins.index()', function () {
 
-    it('indexerIsCalledAndCallsCallbackWithResults', function (done) {
+    it('shouldntFindAnythingIfNotTypesHaveBeenDefined', function (done) {
 
-      var plugins = new Plugins(tmpPath);
-      plugins.index(function (err) {
+      Plugins.index(function (err) {
 
         test.value(err).isNull();
+
         test.object(
-          plugins._index
-        )
-        .hasProperty('group1/example1')
-        .hasProperty('group1/example2')
-        .hasProperty('group2/example3')
-        .hasProperty('group2/example3/sub');
+          global._ejsStatic['ejs-plugins']._index
+        ).is({});
 
         done();
 
@@ -122,28 +279,217 @@ describe('ejs/plugins', function () {
 
     });
 
-    it('resultsShouldBeSortedByWeight', function (done) {
+    it('shouldIndexAllRegisteredTypes', function (done) {
 
-      var plugins = new Plugins(tmpPath);
-      plugins.index(function (err) {
+      var queue = [];
 
-        test.value(err).isNull();
+      Plugins.register(
+        'extension',
+        'Extension',
+        'An extension plugin type.',
+        tmpPath
+      );
 
-        var idx = 0;
-        for (var plugin in plugins._index) {
-          idx++;
-          if (idx === 1) {
-            test.value(plugin).is('group1/example2');
-          } else if (idx === 2) {
-            test.value(plugin).is('group1/example1');
-          } else if (idx === 3) {
-            test.value(plugin).is('group2/example3/sub');
-          } else if (idx === 4) {
-            test.value(plugin).is('group2/example3');
-          }
+      queue.push(function (next) {
+        Plugins.index(next);
+      });
+
+      async.series(queue, function (err) {
+
+        if (err) {
+          return done(err);
         }
 
-        test.value(idx).is(4);
+        test.object(
+          global._ejsStatic['ejs-plugins']._index
+        ).is({
+          'extension': {
+            'example1': {
+              '_instance': null,
+              '_name': 'example1',
+              '_path': path.join(tmpPath, 'group1', 'example1'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #1.',
+              'main': 'index',
+              'title': 'Example 1',
+              'version': '1.1.0',
+              'weight': 0
+            },
+            'example2': {
+              '_instance': null,
+              '_name': 'example2',
+              '_path': path.join(tmpPath, 'group1', 'example2'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #2.',
+              'main': 'index',
+              'title': 'Example 2',
+              'version': '1.1.0',
+              'weight': -5
+            },
+            'example3': {
+              '_instance': null,
+              '_name': 'example3',
+              '_path': path.join(tmpPath, 'group2', 'example3'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #3.',
+              'main': 'index',
+              'title': 'Example 3',
+              'version': '1.0.0',
+              'weight': 5
+            },
+            'sub': {
+              '_instance': null,
+              '_name': 'sub',
+              '_path': path.join(tmpPath, 'group2', 'example3', 'sub'),
+              'author': '',
+              'dependencies': {
+                'example3': '1.0.0'
+              },
+              'description': 'Sub example plugin #3.',
+              'main': 'index',
+              'title': 'Subexample 3',
+              'version': '1.0.0',
+              'weight': 4
+            }
+          }
+        });
+
+        done();
+
+      });
+
+    });
+
+    it('shouldIndexSpecifiedTypes', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
+      queue.push(function (next) {
+        Plugins.index(next, 'group1');
+      });
+
+      queue.push(function (next) {
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index
+        ).is({
+          'group1': {
+            'example1': {
+              '_instance': null,
+              '_name': 'example1',
+              '_path': path.join(tmpPath, 'group1', 'example1'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #1.',
+              'main': 'index',
+              'title': 'Example 1',
+              'version': '1.1.0',
+              'weight': 0
+            },
+            'example2': {
+              '_instance': null,
+              '_name': 'example2',
+              '_path': path.join(tmpPath, 'group1', 'example2'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #2.',
+              'main': 'index',
+              'title': 'Example 2',
+              'version': '1.1.0',
+              'weight': -5
+            }
+          }
+        });
+
+        next();
+
+      });
+
+      queue.push(function (next) {
+        Plugins.index(next, 'group2');
+      });
+
+      async.series(queue, function (err) {
+
+        if (err) {
+          return done(err);
+        }
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index
+        ).is({
+          'group1': {
+            'example1': {
+              '_instance': null,
+              '_name': 'example1',
+              '_path': path.join(tmpPath, 'group1', 'example1'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #1.',
+              'main': 'index',
+              'title': 'Example 1',
+              'version': '1.1.0',
+              'weight': 0
+            },
+            'example2': {
+              '_instance': null,
+              '_name': 'example2',
+              '_path': path.join(tmpPath, 'group1', 'example2'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #2.',
+              'main': 'index',
+              'title': 'Example 2',
+              'version': '1.1.0',
+              'weight': -5
+            }
+          },
+          'group2': {
+            'example3': {
+              '_instance': null,
+              '_name': 'example3',
+              '_path': path.join(tmpPath, 'group2', 'example3'),
+              'author': '',
+              'dependencies': {},
+              'description': 'Example plugin #3.',
+              'main': 'index',
+              'title': 'Example 3',
+              'version': '1.0.0',
+              'weight': 5
+            },
+            'sub': {
+              '_instance': null,
+              '_name': 'sub',
+              '_path': path.join(tmpPath, 'group2', 'example3', 'sub'),
+              'author': '',
+              'dependencies': {
+                'example3': '1.0.0'
+              },
+              'description': 'Sub example plugin #3.',
+              'main': 'index',
+              'title': 'Subexample 3',
+              'version': '1.0.0',
+              'weight': 4
+            }
+          }
+        });
 
         done();
 
@@ -155,23 +501,50 @@ describe('ejs/plugins', function () {
 
   describe('Plugins.plugins()', function () {
 
-    it('shouldReturnAnEmptyArrayIfNotIndexed', function () {
+    it('shouldReturnAnEmptyObjectIfNotIndexed', function () {
 
-      var plugins = new Plugins(tmpPath);
-
-      test.array(
-        plugins.plugins()
-      ).hasLength(0);
+      test.object(
+        Plugins.plugins()
+      ).is({});
 
     });
 
-    it('shouldReturnIndexedNames', function (done) {
+    it('shouldReturnAnEmptyObjectIfTypeNotIndexed', function () {
 
-      var plugins = new Plugins(tmpPath),
-          queue = [];
+      test.object(
+        Plugins.plugins('extension')
+      ).is({});
+
+    });
+
+  });
+
+  describe('Plugins.enable()', function () {
+
+    it('shouldEnablePluginOfSpecifiedTypeAndName', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
+      });
+
+      queue.push(function (next) {
+        Plugins.enable(next, 'group1', ['example1']);
       });
 
       async.series(queue, function (err) {
@@ -180,13 +553,167 @@ describe('ejs/plugins', function () {
           return done(err);
         }
 
-        var names = plugins.plugins();
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group1.example1._instance
+        ).isInstanceOf(Plugin);
 
-        test.array(names).hasLength(4);
-        test.value(names[0]).is('group1/example2');
-        test.value(names[1]).is('group1/example1');
-        test.value(names[2]).is('group2/example3/sub');
-        test.value(names[3]).is('group2/example3');
+        test.value(
+          global._ejsStatic['ejs-plugins']._index.group1.example2._instance
+        ).isNull();
+
+        test.value(
+          global._ejsStatic['ejs-plugins']._index.group2.example3._instance
+        ).isNull();
+
+        done();
+
+      });
+
+    });
+
+    it('shouldEnableAllPluginsOfSpecifiedType', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
+      queue.push(function (next) {
+        Plugins.index(next);
+      });
+
+      queue.push(function (next) {
+        Plugins.enable(next, 'group1');
+      });
+
+      async.series(queue, function (err) {
+
+        if (err) {
+          return done(err);
+        }
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group1.example1._instance
+        ).isInstanceOf(Plugin);
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group1.example2._instance
+        ).isInstanceOf(Plugin);
+
+        test.value(
+          global._ejsStatic['ejs-plugins']._index.group2.example3._instance
+        ).isNull();
+
+        done();
+
+      });
+
+    });
+
+    it('shouldEnableAllPluginsOfMultipleTypes', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
+      queue.push(function (next) {
+        Plugins.index(next);
+      });
+
+      queue.push(function (next) {
+        Plugins.enable(next, ['group1', 'group2']);
+      });
+
+      async.series(queue, function (err) {
+
+        if (err) {
+          return done(err);
+        }
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group1.example1._instance
+        ).isInstanceOf(Plugin);
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group1.example2._instance
+        ).isInstanceOf(Plugin);
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group2.example3._instance
+        ).isInstanceOf(Plugin);
+
+        done();
+
+      });
+
+    });
+
+    it('shouldEnableAllPlugins', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
+      queue.push(function (next) {
+        Plugins.index(next);
+      });
+
+      queue.push(function (next) {
+        Plugins.enable(next);
+      });
+
+      async.series(queue, function (err) {
+
+        if (err) {
+          return done(err);
+        }
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group1.example1._instance
+        ).isInstanceOf(Plugin);
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group1.example2._instance
+        ).isInstanceOf(Plugin);
+
+        test.object(
+          global._ejsStatic['ejs-plugins']._index.group2.example3._instance
+        ).isInstanceOf(Plugin);
 
         done();
 
@@ -196,36 +723,36 @@ describe('ejs/plugins', function () {
 
   });
 
-  describe('Plugins.initialize()', function () {
+  describe('Plugins.enabled()', function () {
 
-    it('shouldInitializeAllThePlugins', function (done) {
+    it('shouldThrowErrorIfUndefinedType', function () {
 
-      var plugins = new Plugins(tmpPath),
-          initd = {},
-          queue = [];
+      test.exception(function () {
+        Plugins.enabled('group1', 'example1');
+      }).isInstanceOf(EUndefinedPluginType);
 
-      function mockInit(plugin) {
-        return function (next) {
-          initd[plugin] = true;
+    });
 
-          next();
-        };
-      }
+    it('shouldThrowErrorIfUnknownPlugin', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
-      });
-
-      queue.push(function (next) {
-        for (var plg in plugins._index) {
-          plugins._index[plg].initialize = mockInit(plg);
-        }
-
-        next();
-      });
-
-      queue.push(function (next) {
-        plugins.initialize(next);
+        Plugins.index(next);
       });
 
       async.series(queue, function (err) {
@@ -234,12 +761,9 @@ describe('ejs/plugins', function () {
           return done(err);
         }
 
-        test.object(initd).is({
-          'group1/example1': true,
-          'group1/example2': true,
-          'group2/example3': true,
-          'group2/example3/sub': true
-        });
+        test.exception(function () {
+          Plugins.enabled('group1', 'example5');
+        }).isInstanceOf(EUndefinedPlugin);
 
         done();
 
@@ -247,27 +771,26 @@ describe('ejs/plugins', function () {
 
     });
 
-    it('shouldEmitEvents', function (done) {
+    it('shouldReturnFalseIfNotEnabled', function (done) {
 
-      var plugins = new Plugins(tmpPath),
-          initd = {},
-          initialized = false,
-          queue = [];
+      var queue = [];
 
-      plugins.on('initialize', function (plugin) {
-        initd[plugin] = true;
-      });
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
 
-      plugins.on('initialized', function () {
-        initialized = true;
-      });
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
-      });
-
-      queue.push(function (next) {
-        plugins.initialize(next);
+        Plugins.index(next);
       });
 
       async.series(queue, function (err) {
@@ -276,14 +799,63 @@ describe('ejs/plugins', function () {
           return done(err);
         }
 
-        test.object(initd).is({
-          'group1/example1': true,
-          'group1/example2': true,
-          'group2/example3': true,
-          'group2/example3/sub': true
-        });
+        test.bool(
+          Plugins.enabled('group1', 'example1')
+        ).isNotTrue();
 
-        test.bool(initialized).isTrue();
+        test.bool(
+          Plugins.enabled('group1', 'example2')
+        ).isNotTrue();
+
+        test.bool(
+          Plugins.enabled('group2', 'example3')
+        ).isNotTrue();
+
+        test.bool(
+          Plugins.enabled('group2', 'sub')
+        ).isNotTrue();
+
+        done();
+
+      });
+
+    });
+
+    it('shouldReturnTrue', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
+      queue.push(function (next) {
+        Plugins.index(next);
+      });
+
+      queue.push(function (next) {
+        Plugins.enable(next);
+      });
+
+      async.series(queue, function (err) {
+
+        if (err) {
+          return done(err);
+        }
+
+        test.bool(
+          Plugins.enabled('group1', 'example1')
+        ).isTrue();
 
         done();
 
@@ -293,15 +865,36 @@ describe('ejs/plugins', function () {
 
   });
 
-  describe('Plugins.initialized()', function () {
+  describe('Plugins.disable()', function () {
 
-    it('shouldReturnFalseIfNotInitialized', function (done) {
+    it('shouldDisablePluginOfSpecifiedTypeAndName', function (done) {
 
-      var plugins = new Plugins(tmpPath),
-          queue = [];
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
+      });
+
+      queue.push(function (next) {
+        Plugins.enable(next, 'group1', ['example1']);
+      });
+
+      queue.push(function (next) {
+        Plugins.disable(next, 'group1', ['example1']);
       });
 
       async.series(queue, function (err) {
@@ -310,21 +903,17 @@ describe('ejs/plugins', function () {
           return done(err);
         }
 
-        test.bool(
-          plugins.initialized('group1/example1')
-        ).isNotTrue();
+        test.value(
+          global._ejsStatic['ejs-plugins']._index.group1.example1._instance
+        ).isNull();
 
-        test.bool(
-          plugins.initialized('group1/example2')
-        ).isNotTrue();
+        test.value(
+          global._ejsStatic['ejs-plugins']._index.group1.example2._instance
+        ).isNull();
 
-        test.bool(
-          plugins.initialized('group2/example3')
-        ).isNotTrue();
-
-        test.bool(
-          plugins.initialized('group2/example3/sub')
-        ).isNotTrue();
+        test.value(
+          global._ejsStatic['ejs-plugins']._index.group2.example3._instance
+        ).isNull();
 
         done();
 
@@ -332,40 +921,55 @@ describe('ejs/plugins', function () {
 
     });
 
-    it('shouldReturnTrueForInitializedPlugins', function (done) {
+  });
 
-      var plugins = new Plugins(tmpPath),
-          queue = [];
+  describe('Plugins.update()', function () {
+
+    it('shouldThrowErrorIfUndefinedPluginType', function (done) {
+
+      Plugins.update(function (err) {
+
+        test.object(
+          err
+        ).isInstanceOf(EUndefinedPluginType);
+
+        done();
+
+      }, 'group1', 'example1');
+
+    });
+
+    it('shouldThrowErrorIfUndefinedPlugin', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
       });
 
       queue.push(function (next) {
-        plugins.initialize(next);
+        Plugins.update(next, 'group1', 'example10');
       });
 
       async.series(queue, function (err) {
 
-        if (err) {
-          return done(err);
-        }
-
-        test.bool(
-          plugins.initialized('group1/example1')
-        ).isTrue();
-
-        test.bool(
-          plugins.initialized('group1/example2')
-        ).isTrue();
-
-        test.bool(
-          plugins.initialized('group2/example3')
-        ).isTrue();
-
-        test.bool(
-          plugins.initialized('group2/example3/sub')
-        ).isTrue();
+        test.object(
+          err
+        ).isInstanceOf(EUndefinedPlugin);
 
         done();
 
@@ -377,31 +981,50 @@ describe('ejs/plugins', function () {
 
   describe('Plugins.message()', function () {
 
-    it('shouldntMessageUninitializedPlugins', function (done) {
+    it('shouldntMessageDisabledPlugins', function (done) {
 
-      var plugins = new Plugins(tmpPath),
-          recieved = {},
-          queue = [];
+      var recieved = {},
+          queue = [],
+          mockMessage = function (dne, msg, param1, param2) {
+            recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
+            dne();
+          };
 
-      function mockMessage(next, plugin, msg, param1, param2) {
-        recieved[plugin] = msg + ': ' + param1 + ' ' + param2;
-        next();
-      }
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
       });
 
       queue.push(function (next) {
-        for (var plg in plugins._index) {
-          plugins._index[plg].message = mockMessage;
+        for (var type in global._ejsStatic['ejs-plugins']._index) {
+          var plugins = global._ejsStatic['ejs-plugins']._index[type];
+          for (var plg in plugins) {
+            if (!plugins[plg]._instance) {
+              continue;
+            }
+
+            plugins[plg]._instance._message = mockMessage;
+          }
         }
 
         next();
       });
 
       queue.push(function (next) {
-        plugins.message(next, 'group1/example1', 'hello', 'foo', 'bar');
+        Plugins.message(next, 'group1', 'example1', 'hello', 'foo', 'bar');
       });
 
       async.series(queue, function (err) {
@@ -422,32 +1045,52 @@ describe('ejs/plugins', function () {
 
     it('shouldSendMessageToSpecifiedPlugin', function (done) {
 
-      var plugins = new Plugins(tmpPath),
-          recieved = {},
+      var recieved = {},
           queue = [],
           mockMessage = function (next, msg, param1, param2) {
             recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
             next();
           };
 
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
       });
 
       queue.push(function (next) {
-        for (var plg in plugins._index) {
-          plugins._index[plg]._message = mockMessage;
+        Plugins.enable(next);
+      });
+
+      queue.push(function (next) {
+        for (var type in global._ejsStatic['ejs-plugins']._index) {
+          var plugins = global._ejsStatic['ejs-plugins']._index[type];
+          for (var plg in plugins) {
+            if (!plugins[plg]._instance) {
+              continue;
+            }
+
+            plugins[plg]._instance._message = mockMessage;
+          }
         }
 
         next();
       });
 
       queue.push(function (next) {
-        plugins.initialize(next);
-      });
-
-      queue.push(function (next) {
-        plugins.message(next, 'group1/example1', 'hello', 'foo', 'bar');
+        Plugins.message(next, 'group1', 'example1', 'hello', 'foo', 'bar');
       });
 
       async.series(queue, function (err) {
@@ -459,7 +1102,7 @@ describe('ejs/plugins', function () {
         test.object(
           recieved
         ).is({
-          'group1/example1': 'hello: foo bar'
+          'example1': 'hello: foo bar'
         });
 
         done();
@@ -468,37 +1111,54 @@ describe('ejs/plugins', function () {
 
     });
 
-    it('shouldSendMessageToSpecifiedPlugins', function (done) {
+    it('shouldSendMessageToSpecifiedPluginTypes', function (done) {
 
-      var plugins = new Plugins(tmpPath),
-          recieved = {},
+      var recieved = {},
           queue = [],
           mockMessage = function (next, msg, param1, param2) {
             recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
             next();
           };
 
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
       });
 
       queue.push(function (next) {
-        for (var plg in plugins._index) {
-          plugins._index[plg]._message = mockMessage;
+        Plugins.enable(next);
+      });
+
+      queue.push(function (next) {
+        for (var type in global._ejsStatic['ejs-plugins']._index) {
+          var plugins = global._ejsStatic['ejs-plugins']._index[type];
+          for (var plg in plugins) {
+            if (!plugins[plg]._instance) {
+              continue;
+            }
+
+            plugins[plg]._instance._message = mockMessage;
+          }
         }
 
         next();
       });
 
       queue.push(function (next) {
-        plugins.initialize(next);
-      });
-
-      queue.push(function (next) {
-        plugins.message(next, [
-          'group1/example1',
-          'group2/example3'
-        ], 'hello', 'foo', 'bar');
+        Plugins.message(next, 'group1', null, 'hello', 'foo', 'bar');
       });
 
       async.series(queue, function (err) {
@@ -510,8 +1170,8 @@ describe('ejs/plugins', function () {
         test.object(
           recieved
         ).is({
-          'group1/example1': 'hello: foo bar',
-          'group2/example3': 'hello: foo bar'
+          'example1': 'hello: foo bar',
+          'example2': 'hello: foo bar'
         });
 
         done();
@@ -522,32 +1182,52 @@ describe('ejs/plugins', function () {
 
     it('shouldSendMessageToAllPlugins', function (done) {
 
-      var plugins = new Plugins(tmpPath),
-          recieved = {},
+      var recieved = {},
           queue = [],
           mockMessage = function (next, msg, param1, param2) {
             recieved[this.plugin] = msg + ': ' + param1 + ' ' + param2;
             next();
           };
 
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
       });
 
       queue.push(function (next) {
-        for (var plg in plugins._index) {
-          plugins._index[plg]._message = mockMessage;
+        Plugins.enable(next);
+      });
+
+      queue.push(function (next) {
+        for (var type in global._ejsStatic['ejs-plugins']._index) {
+          var plugins = global._ejsStatic['ejs-plugins']._index[type];
+          for (var plg in plugins) {
+            if (!plugins[plg]._instance) {
+              continue;
+            }
+
+            plugins[plg]._instance._message = mockMessage;
+          }
         }
 
         next();
       });
 
       queue.push(function (next) {
-        plugins.initialize(next);
-      });
-
-      queue.push(function (next) {
-        plugins.message(next, null, 'hello', 'foo', 'bar');
+        Plugins.message(next, null, null, 'hello', 'foo', 'bar');
       });
 
       async.series(queue, function (err) {
@@ -559,51 +1239,10 @@ describe('ejs/plugins', function () {
         test.object(
           recieved
         ).is({
-          'group1/example1': 'hello: foo bar',
-          'group1/example2': 'hello: foo bar',
-          'group2/example3': 'hello: foo bar',
-          'group2/example3/sub': 'hello: foo bar'
-        });
-
-        done();
-
-      });
-
-    });
-
-    it('shouldEmitEvents', function (done) {
-
-      var plugins = new Plugins(tmpPath),
-          msgs = {},
-          queue = [];
-
-      plugins.on('message', function (plugin, msg, param1, param2) {
-        msgs[plugin] = msg + ': ' + param1 + ' ' + param2;
-      });
-
-      queue.push(function (next) {
-        plugins.index(next);
-      });
-
-      queue.push(function (next) {
-        plugins.initialize(next);
-      });
-
-      queue.push(function (next) {
-        plugins.message(next, null, 'hello', 'foo', 'bar');
-      });
-
-      async.series(queue, function (err) {
-
-        if (err) {
-          return done(err);
-        }
-
-        test.object(msgs).is({
-          'group1/example1': 'hello: foo bar',
-          'group1/example2': 'hello: foo bar',
-          'group2/example3': 'hello: foo bar',
-          'group2/example3/sub': 'hello: foo bar'
+          'example1': 'hello: foo bar',
+          'example2': 'hello: foo bar',
+          'example3': 'hello: foo bar',
+          'sub': 'hello: foo bar'
         });
 
         done();
@@ -616,13 +1255,34 @@ describe('ejs/plugins', function () {
 
   describe('Plugins.plugin()', function () {
 
-    it('shouldThrowErrorIfUndefined', function (done) {
+    it('shouldThrowErrorIfUndefinedPluginType', function () {
 
-      var plugins = new Plugins(tmpPath),
-          queue = [];
+      test.exception(function () {
+        Plugins.plugin('group1', 'example1');
+      }).isInstanceOf(EUndefinedPluginType);
+
+    });
+
+    it('shouldThrowErrorIfUndefinedPlugin', function (done) {
+
+      var queue = [];
+
+            Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
       });
 
       async.series(queue, function (err) {
@@ -632,8 +1292,46 @@ describe('ejs/plugins', function () {
         }
 
         test.exception(function () {
-          plugins.plugin('test');
+          Plugins.plugin('group1', 'example10');
         }).isInstanceOf(EUndefinedPlugin);
+
+        done();
+
+      });
+
+    });
+
+    it('shouldThrowErrorIfPluginNotEnabled', function (done) {
+
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
+
+      queue.push(function (next) {
+        Plugins.index(next);
+      });
+
+      async.series(queue, function (err) {
+
+        if (err) {
+          return done(err);
+        }
+
+        test.exception(function () {
+          Plugins.plugin('group1', 'example1');
+        }).isInstanceOf(EDisabledPlugin);
 
         done();
 
@@ -643,15 +1341,28 @@ describe('ejs/plugins', function () {
 
     it('shouldReturnThePluginObject', function (done) {
 
-      var plugins = new Plugins(tmpPath),
-          queue = [];
+      var queue = [];
+
+      Plugins.register(
+        'group1',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group1')
+      );
+
+      Plugins.register(
+        'group2',
+        'Extension',
+        'An extension plugin type.',
+        path.join(tmpPath, 'group2')
+      );
 
       queue.push(function (next) {
-        plugins.index(next);
+        Plugins.index(next);
       });
 
       queue.push(function (next) {
-        plugins.initialize(next);
+        Plugins.enable(next);
       });
 
       async.series(queue, function (err) {
@@ -661,8 +1372,10 @@ describe('ejs/plugins', function () {
         }
 
         test.object(
-          plugins.plugin('group1/example1')
-        ).isInstanceOf(Plugin).is(plugins._index['group1/example1']);
+          Plugins.plugin('group1', 'example1')
+        ).isInstanceOf(Plugin).is(
+          global._ejsStatic['ejs-plugins']._index.group1.example1._instance
+        );
 
         done();
 

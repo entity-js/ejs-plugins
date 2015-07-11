@@ -6,7 +6,7 @@
     "Plugins"
   ],
   "author": "Orgun109uk <orgun109uk@gmail.com> (http://my-site.com/)",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "repository": {
     "type": "git",
     "url": "git://github.com/entity-js/ejs-plugins.git"
@@ -18,9 +18,12 @@
   },
   "dependencies": {
     "async": "^1.2.1",
+    "ejs-listener": "git://github.com/entity-js/ejs-listener.git#0.0.2",
     "ejs-merge": "git://github.com/entity-js/ejs-merge.git#0.0.2",
     "ejs-sortby": "git://github.com/entity-js/ejs-sortby.git#0.0.2",
+    "ejs-static": "git://github.com/entity-js/ejs-static.git#0.0.1",
     "ejs-t": "git://github.com/entity-js/ejs-t.git#0.0.3",
-    "glob": "^5.0.12"
+    "glob": "^5.0.12",
+    "semver": "^4.3.6"
   }
 }
